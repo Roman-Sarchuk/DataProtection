@@ -1,0 +1,8 @@
+application programs for computer-aided design can be run on almost any computer
+ consisting of central processing unit. memory and some type of input and output
+ units, the central processing unit carries out program instrutions to perform o
+perations on data, programs and data are stored in memory and socalled data buse
+s carry signals between the central processing unit. memory and input and output
+ devices, input typically consists of devices for manual data entry such as keyb
+oards, computers commonly are divided into several classes, speed. accessible me
+mory and processor are used to classify computers, both speed and memory depend 
