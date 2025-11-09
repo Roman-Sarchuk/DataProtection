@@ -18,6 +18,9 @@
     <ClCompile Include="lab4.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="auxiliary.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="input.txt">
@@ -29,5 +32,10 @@
     <Text Include="text.txt">
       <Filter>Resource Files</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="auxiliary.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

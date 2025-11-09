@@ -123,12 +123,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="auxiliary.cpp" />
     <ClCompile Include="lab4.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="input.txt" />
     <Text Include="output.txt" />
     <Text Include="text.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="auxiliary.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
