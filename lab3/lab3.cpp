@@ -119,7 +119,7 @@ int main()
         out.close();
     }
     else if (choice == 2) {
-        // Decoding
+        // Decrypting
         string ciphertextPath;
 
         cout << "\nEnter the path to the encrypted file: ";
