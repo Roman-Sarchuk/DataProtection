@@ -29,7 +29,7 @@
     <Text Include="output.txt">
       <Filter>Resource Files</Filter>
     </Text>
-    <Text Include="text.txt">
+    <Text Include="key.txt">
       <Filter>Resource Files</Filter>
     </Text>
   </ItemGroup>

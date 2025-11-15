@@ -102,6 +102,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\DevPrg\eigen-5.0.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -129,7 +130,7 @@
   <ItemGroup>
     <Text Include="input.txt" />
     <Text Include="output.txt" />
-    <Text Include="text.txt" />
+    <Text Include="key.txt" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="auxiliary.h" />
