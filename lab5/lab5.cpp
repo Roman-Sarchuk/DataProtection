@@ -2,34 +2,358 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include <Eigen/Dense>
+#include <stdexcept>
+#include <algorithm>
 #include "auxiliary.h"
 
-using namespace Eigen;
 using namespace std;
 
 #define OUTPUT_FILE_NAME "output.txt"
 #define KEY_FILE_NAME "key.txt"
 
 const string alphabet = "abcdefghijklmnopqrstuvwxyz .,;-'";
-const int alphabetSize = alphabet.length();
-
+const int ALPHABET_SIZE = alphabet.length();
 
 vector<vector<int>> parseKeyMatrix(const string& keyText, int& n);
-
 string encrypt(const string& text, const vector<vector<int>>& key);
-
 string decrypt(const string& text, const vector<vector<int>>& key);
 
+class HillCipher {
+private:
+    std::vector<std::vector<int>> keyMatrix;
+    std::vector<std::vector<int>> inverseKeyMatrix;
+    int matrixSize;
+    int modValue;
+
+    // Extended Euclidean algorithm for finding modular inverse
+    int modInverse(int a, int m) {
+        a = a % m;
+        for (int x = 1; x < m; x++) {
+            if ((a * x) % m == 1) {
+                return x;
+            }
+        }
+        throw std::runtime_error("Inverse element does not exist");
+    }
+
+    // Calculate matrix determinant
+    int determinant(const std::vector<std::vector<int>>& matrix, int n) {
+        if (n == 1) {
+            return matrix[0][0];
+        }
+        if (n == 2) {
+            return matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
+        }
+
+        int det = 0;
+        for (int p = 0; p < n; p++) {
+            std::vector<std::vector<int>> submatrix(n - 1, std::vector<int>(n - 1));
+            for (int i = 1; i < n; i++) {
+                int col = 0;
+                for (int j = 0; j < n; j++) {
+                    if (j == p) continue;
+                    submatrix[i - 1][col] = matrix[i][j];
+                    col++;
+                }
+            }
+            det += (p % 2 == 0 ? 1 : -1) * matrix[0][p] * determinant(submatrix, n - 1);
+        }
+        return det;
+    }
+
+    // Matrix transposition
+    std::vector<std::vector<int>> transpose(const std::vector<std::vector<int>>& matrix) {
+        int n = matrix.size();
+        std::vector<std::vector<int>> result(n, std::vector<int>(n));
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                result[j][i] = matrix[i][j];
+            }
+        }
+        return result;
+    }
+
+    // Calculate adjugate matrix
+    std::vector<std::vector<int>> adjugate(const std::vector<std::vector<int>>& matrix) {
+        int n = matrix.size();
+        std::vector<std::vector<int>> adj(n, std::vector<int>(n));
+
+        if (n == 1) {
+            adj[0][0] = 1;
+            return adj;
+        }
+
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                std::vector<std::vector<int>> submatrix(n - 1, std::vector<int>(n - 1));
+                for (int x = 0; x < n; x++) {
+                    for (int y = 0; y < n; y++) {
+                        if (x != i && y != j) {
+                            int subX = x < i ? x : x - 1;
+                            int subY = y < j ? y : y - 1;
+                            submatrix[subX][subY] = matrix[x][y];
+                        }
+                    }
+                }
+                adj[j][i] = ((i + j) % 2 == 0 ? 1 : -1) * determinant(submatrix, n - 1);
+            }
+        }
+        return adj;
+    }
+
+    // Calculate inverse matrix modulo
+    void calculateInverseMatrix() {
+        int n = matrixSize;
+        int det = determinant(keyMatrix, n);
+        det = det % modValue;
+        if (det < 0) det += modValue;
+
+        // Check if determinant is coprime with modValue
+        if (det == 0 || gcd(det, modValue) != 1) {
+            throw std::runtime_error("Key matrix is not invertible for this alphabet");
+        }
+
+        int detInverse = modInverse(det, modValue);
+
+        std::vector<std::vector<int>> adj = adjugate(keyMatrix);
+
+        inverseKeyMatrix.resize(n, std::vector<int>(n));
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                inverseKeyMatrix[i][j] = (adj[i][j] * detInverse) % modValue;
+                if (inverseKeyMatrix[i][j] < 0) {
+                    inverseKeyMatrix[i][j] += modValue;
+                }
+            }
+        }
+    }
+
+    // GCD for invertibility check
+    int gcd(int a, int b) {
+        while (b != 0) {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+        return a;
+    }
+
+    // Convert text to numerical vector (skip characters not in alphabet)
+    std::vector<int> textToVector(const std::string& text, std::vector<int>& validIndices) {
+        std::vector<int> result;
+        validIndices.clear();
+
+        for (size_t i = 0; i < text.length(); i++) {
+            char c = text[i];
+            size_t pos = alphabet.find(c);
+            if (pos != std::string::npos) {
+                result.push_back(static_cast<int>(pos));
+                validIndices.push_back(static_cast<int>(i));
+            }
+        }
+        return result;
+    }
+
+    // Matrix-vector multiplication
+    std::vector<int> multiplyMatrixVector(const std::vector<std::vector<int>>& matrix,
+        const std::vector<int>& vector) {
+        int n = matrix.size();
+        std::vector<int> result(n, 0);
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                result[i] += matrix[i][j] * vector[j];
+            }
+            result[i] = result[i] % modValue;
+            if (result[i] < 0) result[i] += modValue;
+        }
+        return result;
+    }
+
+public:
+    HillCipher(const std::vector<std::vector<int>>& key, int mod = ALPHABET_SIZE)
+        : keyMatrix(key), matrixSize(key.size()), modValue(mod) {
+        calculateInverseMatrix();
+    }
+
+    // Encryption with preservation of non-alphabet characters
+    std::string encrypt(const std::string& plaintext) {
+        std::vector<int> validIndices;
+        std::vector<int> textVector = textToVector(plaintext, validIndices);
+
+        // If no characters to encrypt
+        if (textVector.empty()) {
+            return plaintext;
+        }
+
+        // Add padding if needed
+        size_t originalSize = textVector.size();
+        while (textVector.size() % matrixSize != 0) {
+            textVector.push_back(0); // 'a' as padding
+        }
+
+        std::vector<int> encryptedVector;
+
+        for (size_t i = 0; i < textVector.size(); i += matrixSize) {
+            std::vector<int> block(textVector.begin() + i,
+                textVector.begin() + i + matrixSize);
+            std::vector<int> encryptedBlock = multiplyMatrixVector(keyMatrix, block);
+            encryptedVector.insert(encryptedVector.end(),
+                encryptedBlock.begin(), encryptedBlock.end());
+        }
+
+        // Remove padding from encrypted vector
+        if (encryptedVector.size() > originalSize) {
+            encryptedVector.resize(originalSize);
+        }
+
+        // Reconstruct text with position preservation
+        std::string result = plaintext;
+        size_t encryptedIndex = 0;
+
+        for (size_t i = 0; i < validIndices.size() && encryptedIndex < encryptedVector.size(); i++) {
+            if (encryptedIndex < encryptedVector.size()) {
+                size_t pos = static_cast<size_t>(validIndices[i]);
+                if (pos < result.length()) {
+                    result[pos] = alphabet[encryptedVector[encryptedIndex]];
+                    encryptedIndex++;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    // Decryption with preservation of non-alphabet characters
+    std::string decrypt(const std::string& ciphertext) {
+        std::vector<int> validIndices;
+        std::vector<int> textVector = textToVector(ciphertext, validIndices);
+
+        // If no characters to decrypt
+        if (textVector.empty()) {
+            return ciphertext;
+        }
+
+        // Add padding if needed for decryption
+        size_t originalSize = textVector.size();
+        while (textVector.size() % matrixSize != 0) {
+            textVector.push_back(0); // 'a' as padding
+        }
+
+        std::vector<int> decryptedVector;
+
+        for (size_t i = 0; i < textVector.size(); i += matrixSize) {
+            std::vector<int> block(textVector.begin() + i,
+                textVector.begin() + i + matrixSize);
+            std::vector<int> decryptedBlock = multiplyMatrixVector(inverseKeyMatrix, block);
+            decryptedVector.insert(decryptedVector.end(),
+                decryptedBlock.begin(), decryptedBlock.end());
+        }
+
+        // Remove padding from decrypted vector
+        if (decryptedVector.size() > originalSize) {
+            decryptedVector.resize(originalSize);
+        }
+
+        // Reconstruct text with position preservation
+        std::string result = ciphertext;
+        size_t decryptedIndex = 0;
+
+        for (size_t i = 0; i < validIndices.size() && decryptedIndex < decryptedVector.size(); i++) {
+            if (decryptedIndex < decryptedVector.size()) {
+                size_t pos = static_cast<size_t>(validIndices[i]);
+                if (pos < result.length()) {
+                    result[pos] = alphabet[decryptedVector[decryptedIndex]];
+                    decryptedIndex++;
+                }
+            }
+        }
+
+        return result;
+    }
+};
+
+// Function to normalize key matrix (mod ALPHABET_SIZE)
+vector<vector<int>> normalizeKeyMatrix(const vector<vector<int>>& keyMatrix) {
+    vector<vector<int>> normalized = keyMatrix;
+    for (auto& row : normalized) {
+        for (auto& val : row) {
+            val = val % ALPHABET_SIZE;
+            if (val < 0) val += ALPHABET_SIZE;
+        }
+    }
+    return normalized;
+}
+
+vector<vector<int>> parseKeyMatrix(const string& keyText, int& n) {
+    vector<vector<int>> keyMatrix;
+    stringstream ss(keyText);
+    string line;
+    int rowCount = 0;
+    int expectedCols = -1;
+
+    while (getline(ss, line)) {
+        if (line.empty()) continue;
+        stringstream lineStream(line);
+        vector<int> row;
+        string token;
+
+        while (lineStream >> token) {
+            try {
+                int value = stoi(token);
+                row.push_back(value);
+            }
+            catch (...) {
+                throw runtime_error("Invalid value in key matrix: '" + token + "'");
+            }
+        }
+
+        if (expectedCols == -1) expectedCols = row.size();
+        else if (row.size() != expectedCols)
+            throw runtime_error("Non-square key matrix: inconsistent number of columns");
+
+        keyMatrix.push_back(row);
+        rowCount++;
+    }
+
+    if (rowCount != expectedCols)
+        throw runtime_error("Non-square key matrix: number of rows != number of columns");
+
+    n = rowCount;
+
+    // Normalize key matrix
+    return normalizeKeyMatrix(keyMatrix);
+}
+
+string encrypt(const string& text, const vector<vector<int>>& key) {
+    try {
+        HillCipher cipher(key, ALPHABET_SIZE);
+        return cipher.encrypt(text);
+    }
+    catch (const exception& e) {
+        cerr << "Encryption error: " << e.what() << endl;
+        return text; // Return original text in case of error
+    }
+}
+
+string decrypt(const string& text, const vector<vector<int>>& key) {
+    try {
+        HillCipher cipher(key, ALPHABET_SIZE);
+        return cipher.decrypt(text);
+    }
+    catch (const exception& e) {
+        cerr << "Decryption error: " << e.what() << endl;
+        return text; // Return original text in case of error
+    }
+}
 
 int main()
 {
     int n;
     int choice;
 
-    cout << "=+=+= Hila cipher =+=+=" << endl;
+    cout << "=+=+= Hill cipher =+=+=" << endl;
 
-    // KEY MATRIX
+    // --- --- --- KEY MATRIX --- --- ---
     cout << "--- Key matrix ---" << endl;
     cout << "Getting key from file '" << KEY_FILE_NAME << "'...\n" << endl;
 
@@ -54,7 +378,7 @@ int main()
             int r;
             for (int i = 0; i < n; i++) {
                 for (int j = 0; j < n; j++) {
-                    r = rand() % alphabetSize;
+                    r = rand() % ALPHABET_SIZE;
                     keyText += to_string(r) + "\t";
                 }
                 keyText += "\n";
@@ -108,7 +432,8 @@ int main()
     }
     cout << "--- --- ------ ---\n" << endl;
 
-    cout << "--- Chipher ---" << endl;
+    // --- --- --- CIPHER --- --- ---
+    cout << "--- Cipher ---" << endl;
     cout << "1. Encryption" << endl;
     cout << "2. Decryption" << endl;
     cout << "Choose an option (1 or 2): ";
@@ -125,7 +450,7 @@ int main()
 
         string plaintext = readFileContent(plaintextPath);
 
-		cout << "\nPlaintext read from file:\n" << plaintext << endl << endl;
+        cout << "\nPlaintext read from file:\n" << plaintext << endl << endl;
 
         toLowerCase(plaintext);
 
@@ -149,17 +474,17 @@ int main()
         string ciphertext = readFileContent(ciphertextPath);
 
         cout << "\nCiphertext read from file:\n" << ciphertext << endl << endl;
-        
+
         toLowerCase(ciphertext);
 
         // Decrypt
-        string encrypted = decrypt(ciphertext, keyMatrix);
-        toUpperCase(encrypted);
+        string decrypted = decrypt(ciphertext, keyMatrix);
+        toUpperCase(decrypted);
 
-        cout << "\nDecrypted text: \n" << encrypted << endl;
+        cout << "\nDecrypted text: \n" << decrypted << endl;
 
         // Save result
-        writeFileContent(OUTPUT_FILE_NAME, encrypted);
+        writeFileContent(OUTPUT_FILE_NAME, decrypted);
     }
     else {
         cerr << "Invalid option!" << endl;
@@ -168,217 +493,4 @@ int main()
     cout << "--- ------- ---" << endl;
 
     return 0;
-}
-
-
-vector<vector<int>> parseKeyMatrix(const string& keyText, int& n) {
-    vector<vector<int>> keyMatrix;
-    stringstream ss(keyText);
-    string line;
-    int rowCount = 0;
-    int expectedCols = -1;
-
-    while (getline(ss, line)) {
-        if (line.empty()) continue;
-        stringstream lineStream(line);
-        vector<int> row;
-        string token;
-
-        while (lineStream >> token) {
-            try {
-                int value = stoi(token);
-                row.push_back(value);
-            }
-            catch (...) {
-                throw runtime_error("Invalid value in key matrix: '" + token + "'");
-            }
-        }
-
-        if (expectedCols == -1) expectedCols = row.size();
-        else if (row.size() != expectedCols)
-            throw runtime_error("Non-square key matrix: inconsistent number of columns");
-
-        keyMatrix.push_back(row);
-        rowCount++;
-    }
-
-    if (rowCount != expectedCols)
-        throw runtime_error("Non-square key matrix: number of rows != number of columns");
-
-    n = rowCount;
-    return keyMatrix;
-}
-
-
-
-int mod(int a, int b) {
-    return (a % b + b) % b;
-}
-
-
-int gcd(int a, int b) {
-    return b == 0 ? a : gcd(b, a % b);
-}
-
-
-int modInverse(int a, int m) { 
-    a = mod(a, m); 
-    for (int x = 1; x < m; ++x) 
-        if (mod(a * x, m) == 1) 
-            return x; 
-    return -1; 
-}
-
-
-void modMatrix(MatrixXi& mat, int modVal) {
-    for (int i = 0; i < mat.rows(); ++i)
-        for (int j = 0; j < mat.cols(); ++j)
-            mat(i, j) = mod(mat(i, j), modVal);
-}
-
-
-bool isInAlphabet(char c) {
-    return alphabet.find(tolower(c)) != string::npos;
-}
-
-int getAlphabetIndex(char c) {
-    for (int i = 0; i < alphabetSize; i++) {
-        if (alphabet[i] == tolower(c))
-            return i;
-	}
-    return getAlphabetIndex('x');
-}
-
-
-vector<int> textToNumbers(const string& text) {
-    /*
-        add char idx in alphabet to nums
-        or if char not in alphabet add -1
-    */
-    vector<int> nums;
-    for (char c : text) {
-        if (isInAlphabet(c)) {
-            nums.push_back(getAlphabetIndex(c));
-        }
-        else {
-            nums.push_back(getAlphabetIndex('X'));
-        }
-    }
-    return nums;
-}
-
-
-string encrypt(const string& text, const vector<vector<int>>& key) {
-    // init key matrix
-    int n = key.size();
-
-    MatrixXi K(n, n);
-
-    cout << "Key matrix:" << endl;
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < n; ++j)
-        {
-            K(i, j) = mod(key[i][j], alphabetSize);
-            cout << K(i, j) << "\t";
-        }
-        cout << endl;
-    }
-
-    // transform text to numbers
-    vector<int> nums = textToNumbers(text);
-
-    while (nums.size() % n != 0)
-        nums.push_back(getAlphabetIndex('X'));
-
-    // encrypt
-    string result = "";
-    for (size_t i = 0; i < nums.size(); i += n) {
-		// form vector
-        VectorXi P(n);
-        for (int j = 0; j < n; j++)
-            P(j) = nums[i + j];
-
-        // calc encrypted vector
-        VectorXi C = (K * P).unaryExpr([](int x) { return mod(x, alphabetSize); });
-
-        // add letters
-        for (int j = 0; j < n; j++) {
-            result += alphabet[C(j)];
-        }
-    }
-
-    return result;
-}
-
-
-string decrypt(const string& text, const vector<vector<int>>& key) {
-    // init key matrix
-    int n = key.size();
-
-    MatrixXi K_int(n, n);
-
-    cout << "Key matrix:" << endl;
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < n; ++j)
-        {
-            K_int(i, j) = mod(key[i][j], alphabetSize);
-            cout << K_int(i, j) << "\t";
-        }
-        cout << endl;
-    }
-
-    // convert to double
-    MatrixXd K = K_int.cast<double>();
-
-    // calc determinant and its modular inverse
-    int det = static_cast<int>(K.determinant() + 0, 5);
-    det = mod(det, alphabetSize);
-
-    int detInv = modInverse(det, alphabetSize);
-    if (detInv == -1) {
-        throw runtime_error("Matrix determinant has no modular inverse! Key is not invertible.");
-    }
-
-    // compute inverse matrix
-    MatrixXd Kinv_d = K.inverse();
-    MatrixXi adjK = ((Kinv_d / det).array().round()).matrix().cast<int>();
-
-    cout << "Inverted key matrix:" << endl;
-    MatrixXi Kinv(n, n);
-    for (int i = 0; i < n; ++i)
-    {
-        for (int j = 0; j < n; ++j) {
-            Kinv(i, j) = mod(adjK(i, j) * detInv, alphabetSize);
-            cout << Kinv(i, j) << "\t";
-        }
-        cout << endl;
-    }
-
-    // transform text to numbers
-    vector<int> nums = textToNumbers(text);
-
-    while (nums.size() % n != 0)
-        nums.push_back(getAlphabetIndex('X'));
-
-    // encrypt
-    string result = "";
-    for (size_t i = 0; i < nums.size(); i += n) {
-        // form vector
-        VectorXi C(n);
-        for (int j = 0; j < n; j++) {
-            C(j) = nums[i + j];
-
-            // calc decrypted vector
-            VectorXi P = (Kinv * C).unaryExpr([](int x) { return mod(x, alphabetSize); });
-
-            // add letters
-            for (int j = 0; j < n; j++) {
-                result += alphabet[P(j)];
-            }
-        }
-    }
-
-    return result;
 }
