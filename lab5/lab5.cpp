@@ -430,6 +430,16 @@ int main()
         }
         cout << endl;
     }
+
+	// Check invertibility
+    try {
+        HillCipher testCipher(keyMatrix, ALPHABET_SIZE);
+    }
+    catch (const exception& e) {
+        cerr << "\nKey matrix error: " << e.what() << endl;
+        return 1;
+	}
+
     cout << "--- --- ------ ---\n" << endl;
 
     // --- --- --- CIPHER --- --- ---
