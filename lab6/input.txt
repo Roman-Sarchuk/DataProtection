@@ -1,0 +1,5 @@
+The first is DART – the Double Asteroid Redirection Test. Plans are
+scheduled to test DART on the moon of an asteroid called Didymos.
+'Didymoon' is onehundred fifty metres wide, orbiting its eight
+hundred metre mother, and hopefully the impact of DART will knock
+it out of its orbit enough for Earth-based telescopes to pick up.
